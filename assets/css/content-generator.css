@@ -1,0 +1,18 @@
+.chatgpt-content-generator-sidebar {
+    padding: 16px;
+}
+
+.chatgpt-content-generator-sidebar textarea {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.chatgpt-content-generator-sidebar .components-button {
+    width: 100%;
+    justify-content: center;
+}
+
+.chatgpt-loading {
+    opacity: 0.7;
+    pointer-events: none;
+}

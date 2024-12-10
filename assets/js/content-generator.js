@@ -1,222 +1,176 @@
 ( function( wp ) {
     const { createElement } = wp.element;
-    const { PluginSidebar } = wp.editor; // Mise à jour de l'import
-    const { PanelBody, TextareaControl, Button } = wp.components;
+    const { PluginSidebar } = wp.editPost; // Changement ici : wp.editPost au lieu de wp.editor
+    const { PanelBody, TextareaControl, Button, SelectControl } = wp.components;
     const { select, dispatch } = wp.data;
+    const { registerPlugin } = wp.plugins;
+
     const ChatGPTContentGenerator = () => {
         const [prompt, setPrompt] = React.useState('');
         const [isGenerating, setIsGenerating] = React.useState(false);
-        const [parsedContent, setParsedContent] = React.useState('');
-        const [showParsed, setShowParsed] = React.useState(false);
-        const [replacementContent, setReplacementContent] = React.useState('');
-    
-        const applyReplacementContent = () => {
+        const [instructionType, setInstructionType] = React.useState('new_content');
+        const [generatedContent, setGeneratedContent] = React.useState('');
+        const [showDialog, setShowDialog] = React.useState(false);
+        const [followUpPrompt, setFollowUpPrompt] = React.useState('');
+
+        const prepareData = () => {
             const editor = select('core/block-editor');
             const blocks = editor.getBlocks();
-            const newTextLines = replacementContent.split('\n').filter(line => line.trim() !== '');
-    
-            let lineIndex = 0;
-    
-            const replaceTextInBlocks = (blocks) => {
-                return blocks.map(block => {
-                    if (lineIndex >= newTextLines.length) {
-                        return block;
-                    }
-    
-                    const currentLine = newTextLines[lineIndex].trim();
-    
-                    switch (block.name) {
-                        case 'core/paragraph':
-                            if (!currentLine.startsWith('#') && !currentLine.startsWith('-')) {
-                                block.attributes.content = currentLine || block.attributes.content;
-                                lineIndex++;
-                            }
-                            break;
-                        case 'core/heading':
-                            if (currentLine.startsWith('#')) {
-                                const headingText = currentLine.replace(/^#+\s*/, '');
-                                block.attributes.content = headingText || block.attributes.content;
-                                lineIndex++;
-                            }
-                            break;
-                        case 'core/list-item':
-                            if (currentLine.startsWith('-')) {
-                                const listItemText = currentLine.replace(/^-+\s*/, '');
-                                block.attributes.content = listItemText || block.attributes.content;
-                                lineIndex++;
-                            }
-                            break;
-                        default:
-                            if (block.innerBlocks && block.innerBlocks.length > 0) {
-                                block.innerBlocks = replaceTextInBlocks(block.innerBlocks);
-                            }
-                            break;
-                    }
-                    return block;
-                });
+            const content = wp.blocks.serialize(blocks);
+
+            return {
+                content: content,
+                prompt: prompt,
+                instruction_type: instructionType,
+                follow_up_prompt: followUpPrompt
             };
-    
-            const updatedBlocks = replaceTextInBlocks(blocks);
-            dispatch('core/block-editor').resetBlocks(updatedBlocks);
-            console.log('Texte remplacé dans les blocs');
         };
 
-        const convertToMarkdown = (blocks) => {
-            const processBlock = (block) => {
-                console.log('Traitement du bloc:', block.name);
-                
-                // Traiter d'abord les blocs enfants s'ils existent
-                let innerContent = '';
-                if (block.innerBlocks && block.innerBlocks.length > 0) {
-                    innerContent = block.innerBlocks
-                        .map(innerBlock => processBlock(innerBlock))
-                        .filter(content => content)
-                        .join('\n\n');
-                }
-        
-                // Traiter le bloc actuel
-                switch (block.name) {
-                    case 'core/paragraph':
-                        return block.attributes.content || '';
-                    
-                    case 'core/heading':
-                        const level = block.attributes.level || 2;
-                        return '#'.repeat(level) + ' ' + (block.attributes.content || '');
-                    
-                    case 'core/columns':
-                        return innerContent; // Retourner le contenu des colonnes
-                    
-                    case 'core/column':
-                        return innerContent; // Retourner le contenu de la colonne
-                    
-                    case 'core/list':
-                        // Traiter les éléments de la liste
-                        return block.innerBlocks.map(listItem => {
-                            if (listItem.name === 'core/list-item') {
-                                return `- ${listItem.attributes.content || ''}`;
-                            }
-                            return '';
-                        }).join('\n');
-                    
-                    default:
-                        console.log('Type de bloc non géré:', block.name);
-                        return innerContent || '';
-                }
-            };
-        
-            const markdownContent = blocks
-                .map(block => processBlock(block))
-                .filter(content => content)
-                .join('\n\n');
-        
-            console.log('Markdown final:', markdownContent);
-            return markdownContent;
-        };
         const generateContent = async () => {
+            if (!prompt) {
+                dispatch('core/notices').createErrorNotice(
+                    'Veuillez saisir des instructions',
+                    { type: 'snackbar' }
+                );
+                return;
+            }
+
             setIsGenerating(true);
-            // Utilisation du nouveau sélecteur block-editor
-            const editor = select('core/block-editor');
-            const blocks = editor.getBlocks();
-            const markdownContent = convertToMarkdown(blocks);
-            setParsedContent(markdownContent);
-        
             try {
+                const preparedData = prepareData();
                 const response = await fetch('/wp-json/chatgpt-content-generator/v1/generate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-WP-Nonce': wpApiSettings.nonce
+                        'X-WP-Nonce': chatgptSettings.nonce
                     },
-                    body: JSON.stringify({
-                        content: markdownContent,
-                        prompt: prompt
-                    })
+                    body: JSON.stringify(preparedData)
                 });
-        
+
                 const data = await response.json();
                 
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erreur lors de la génération du contenu');
+                }
+
                 if (data.success) {
-                    const newBlocks = wp.blocks.parse(data.content);
-                    // Utilisation du nouveau dispatch block-editor
-                    dispatch('core/block-editor').resetBlocks(newBlocks);
+                    setGeneratedContent(data.content);
+                    setShowDialog(true);
                 } else {
-                    console.error('Erreur lors de la génération:', data.message);
+                    throw new Error(data.message || 'Échec de la génération du contenu');
                 }
             } catch (error) {
                 console.error('Erreur:', error);
+                dispatch('core/notices').createErrorNotice(
+                    `Erreur lors de la génération: ${error.message}`,
+                    { type: 'snackbar' }
+                );
             } finally {
                 setIsGenerating(false);
             }
         };
 
-        const handleShowParsed = () => {
-            console.log('Bouton cliqué');
-            // Utilisation du nouveau sélecteur block-editor
-            const editor = select('core/block-editor');
-            const blocks = editor.getBlocks();
-            console.log('Blocs récupérés:', blocks); // Debug
-            const markdownContent = convertToMarkdown(blocks);
-            console.log('Contenu Markdown:', markdownContent);
-            setParsedContent(markdownContent);
-            setShowParsed(!showParsed);
+        // Composant Dialog pour prévisualiser
+        const PreviewDialog = () => {
+            if (!showDialog) return null;
+
+            return createElement('div', {
+                className: 'chatgpt-preview-dialog',
+                style: {
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    backgroundColor: 'white',
+                    padding: '20px',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                    zIndex: 1000,
+                    maxWidth: '80%',
+                    maxHeight: '80vh',
+                    overflow: 'auto'
+                }
+            },
+            createElement('h2', {}, 'Prévisualisation du contenu'),
+            createElement('pre', {
+                style: {
+                    whiteSpace: 'pre-wrap',
+                    backgroundColor: '#f5f5f5',
+                    padding: '10px',
+                    borderRadius: '4px'
+                }
+            }, generatedContent),
+            createElement('div', {
+                style: {
+                    display: 'flex',
+                    gap: '10px',
+                    marginTop: '20px'
+                }
+            },
+                createElement(Button, {
+                    isPrimary: true,
+                    onClick: () => {
+                        const blocks = wp.blocks.parse(generatedContent);
+                        dispatch('core/block-editor').resetBlocks(blocks);
+                        setShowDialog(false);
+                    }
+                }, 'Appliquer'),
+                createElement(Button, {
+                    isSecondary: true,
+                    onClick: () => setShowDialog(false)
+                }, 'Fermer')
+            ));
         };
 
-
+        // Utiliser l'information fournie par le serveur
+        const isChatGPTProcessor = () => {
+            const currentOption = chatgptSettings.instructionOptions.find(
+                option => option.value === instructionType
+            );
+            return currentOption?.uses_chatgpt || false;
+        };
 
         return createElement(
             PluginSidebar,
             {
                 name: 'chatgpt-content-generator',
-                title: 'ChatGPT Generator'
+                title: 'Générateur de contenu',
+                icon: 'admin-comments'
             },
             createElement(
                 PanelBody,
                 {},
-                createElement(TextareaControl, {
+                createElement(SelectControl, {
+                    label: 'Type de génération',
+                    value: instructionType,
+                    options: chatgptSettings.instructionOptions || [],
+                    onChange: setInstructionType
+                }),
+                // N'afficher le champ d'instructions que si nécessaire
+                isChatGPTProcessor() && createElement(TextareaControl, {
                     label: 'Instructions pour ChatGPT',
                     value: prompt,
                     onChange: setPrompt,
-                    rows: 4,
-                    __nextHasNoMarginBottom: true
+                    rows: 4
                 }),
                 createElement(Button, {
                     isPrimary: true,
                     onClick: generateContent,
                     isBusy: isGenerating,
-                    disabled: isGenerating
-                }, isGenerating ? 'Génération...' : 'Générer le contenu'),
-                createElement(Button, {
-                    isSecondary: true,
-                    onClick: handleShowParsed,
-                    style: { marginTop: '10px' }
-                }, showParsed ? 'Masquer le contenu brut' : 'Voir le contenu brut'),
-                showParsed && createElement('pre', {
-                    style: { 
-                        marginTop: '10px',
-                        whiteSpace: 'pre-wrap',
-                        backgroundColor: '#f0f0f0',
-                        padding: '10px',
-                        borderRadius: '4px'
-                    }
-                }, parsedContent || 'Aucun contenu à afficher'),
-                createElement(TextareaControl, {
-                    label: 'Contenu de remplacement',
-                    value: replacementContent,
-                    onChange: setReplacementContent,
-                    rows: 10,
-                    style: { marginTop: '10px' }
-                }),
-                createElement(Button, {
-                    isPrimary: true,
-                    onClick: applyReplacementContent,
-                    style: { marginTop: '10px' }
-                }, 'Appliquer le nouveau texte')
+                    disabled: isGenerating || (isChatGPTProcessor() && !prompt)
+                }, isGenerating ? 'Génération...' : 'Générer'),
+                createElement(PreviewDialog)
             )
         );
     };
 
-    wp.plugins.registerPlugin('chatgpt-content-generator', {
-        icon: 'admin-comments',
-        render: ChatGPTContentGenerator
-    });
+    // Enregistrement du plugin
+    if (typeof wp !== 'undefined' && wp.plugins) {
+        registerPlugin('chatgpt-content-generator', {
+            render: ChatGPTContentGenerator
+        });
+    } else {
+        console.error('WordPress plugins API non disponible');
+    }
+
 })( window.wp );

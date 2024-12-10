@@ -9,8 +9,8 @@ class Markdown_Converter extends Abstract_Utility {
     }
 
     public function process($content) {
-        $parser = new Content_Parser();
-        $blocks = $parser->parse_blocks($content);
+        $blocks = parse_blocks($content);
+
         
         return $this->blocks_to_markdown($blocks);
     }

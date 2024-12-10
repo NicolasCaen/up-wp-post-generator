@@ -3,33 +3,50 @@ class Processor_Registry {
     private static $processors = [];
 
     public static function register_processor($processor_class) {
-        if (!is_subclass_of($processor_class, 'Abstract_Content_Processor')) {
-            throw new Exception("La classe $processor_class doit étendre Abstract_Content_Processor");
+        // Vérifier si c'est un processeur ChatGPT ou un utilitaire
+        if (!is_subclass_of($processor_class, 'Abstract_ChatGPT_Processor') && 
+            !is_subclass_of($processor_class, 'Abstract_Content_Processor')) {
+            $class_name = is_string($processor_class) ? $processor_class : get_class($processor_class);
+            throw new Exception(
+                sprintf(
+                    "La classe '%s' doit étendre soit 'Abstract_ChatGPT_Processor' soit 'Abstract_Content_Processor'",
+                    $class_name
+                )
+            );
         }
+        
         self::$processors[$processor_class::get_type()] = $processor_class;
     }
 
     public static function get_processor($type) {
         if (!isset(self::$processors[$type])) {
-            throw new Exception("Processeur non trouvé pour le type: $type");
+            throw new Exception("Processeur non trouvé : $type");
         }
-        $class = self::$processors[$type];
-        return new $class();
+        return new self::$processors[$type]();
     }
 
     public static function get_available_types() {
         return array_keys(self::$processors);
     }
 
+    public static function requires_prompt($type) {
+        if (!isset(self::$processors[$type])) {
+            throw new Exception("Processeur non trouvé : $type");
+        }
+        
+        // Vérifier si le processeur est un utilitaire
+        return is_subclass_of(self::$processors[$type], 'Abstract_ChatGPT_Processor');
+    }
+
     public static function get_instruction_options() {
         $options = [];
-        foreach (self::$processors as $class) {
+        foreach (self::$processors as $type => $processor_class) {
             $options[] = [
-                'label' => $class::get_label(),
-                'value' => $class::get_type(),
-                'uses_chatgpt' => $class::uses_chatgpt()
+                'value' => $type,
+                'label' => $processor_class::get_label(),
+                'requiresPrompt' => self::requires_prompt($type)
             ];
         }
-        return $options;
+        return array_values($options);
     }
 } 

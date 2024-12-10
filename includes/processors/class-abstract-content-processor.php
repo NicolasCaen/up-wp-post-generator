@@ -1,6 +1,6 @@
 <?php
 abstract class Abstract_Content_Processor {
-    abstract public function process($content, $prompt = '', $follow_up_prompt = '');
+    abstract public function process($content);
     abstract public static function get_type();
     abstract public static function get_label();
     

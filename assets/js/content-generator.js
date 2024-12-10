@@ -1,6 +1,6 @@
 ( function( wp ) {
     const { createElement } = wp.element;
-    const { PluginSidebar } = wp.editPost; // Changement ici : wp.editPost au lieu de wp.editor
+    const { PluginSidebar } = wp.editPost; 
     const { PanelBody, TextareaControl, Button, SelectControl } = wp.components;
     const { select, dispatch } = wp.data;
     const { registerPlugin } = wp.plugins;
@@ -20,14 +20,18 @@
 
             return {
                 content: content,
-                prompt: prompt,
-                instruction_type: instructionType,
-                follow_up_prompt: followUpPrompt
-            };
+                
+                type: instructionType,
+                ...(prompt && { prompt: prompt }),
+                ...(followUpPrompt && { follow_up_prompt: followUpPrompt })
+                };
         };
 
-        const generateContent = async () => {
-            if (!prompt) {
+        const buttonAction = async () => {
+            if (!instructionType) {
+                throw new Error("Paramètre(s) manquant(s) : type");
+            }
+            if (isChatGPTProcessor() && !prompt) {
                 dispatch('core/notices').createErrorNotice(
                     'Veuillez saisir des instructions',
                     { type: 'snackbar' }
@@ -38,6 +42,7 @@
             setIsGenerating(true);
             try {
                 const preparedData = prepareData();
+                alert(JSON.stringify(preparedData));
                 const response = await fetch('/wp-json/chatgpt-content-generator/v1/generate', {
                     method: 'POST',
                     headers: {
@@ -47,11 +52,14 @@
                     body: JSON.stringify(preparedData)
                 });
 
-                const data = await response.json();
-                
+  
+              
                 if (!response.ok) {
-                    throw new Error(data.message || 'Erreur lors de la génération du contenu');
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Erreur lors de la génération du contenu');
                 }
+
+                const data = await response.json();
 
                 if (data.success) {
                     setGeneratedContent(data.content);
@@ -127,7 +135,7 @@
             const currentOption = chatgptSettings.instructionOptions.find(
                 option => option.value === instructionType
             );
-            return currentOption?.uses_chatgpt || false;
+            return currentOption?.requiresPrompt || false;
         };
 
         return createElement(
@@ -146,7 +154,7 @@
                     options: chatgptSettings.instructionOptions || [],
                     onChange: setInstructionType
                 }),
-                // N'afficher le champ d'instructions que si nécessaire
+                // N'afficher le champ d'instructions que si requiresPrompt est true
                 isChatGPTProcessor() && createElement(TextareaControl, {
                     label: 'Instructions pour ChatGPT',
                     value: prompt,
@@ -155,7 +163,7 @@
                 }),
                 createElement(Button, {
                     isPrimary: true,
-                    onClick: generateContent,
+                    onClick: buttonAction,
                     isBusy: isGenerating,
                     disabled: isGenerating || (isChatGPTProcessor() && !prompt)
                 }, isGenerating ? 'Génération...' : 'Générer'),

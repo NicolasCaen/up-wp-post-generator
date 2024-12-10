@@ -4,7 +4,7 @@ class Markdown_Processor extends Abstract_Content_Processor {
         return false;
     }
 
-    public function process($content, $prompt = '', $follow_up_prompt = '') {
+    public function process($content) {
         $blocks = parse_blocks($content);
         return $this->convert_to_markdown($blocks);
     }
@@ -17,15 +17,10 @@ class Markdown_Processor extends Abstract_Content_Processor {
         return __('Générer Markdown', 'chatgpt-content-generator');
     }
 
-    private function convert_to_markdown($blocks) {
-        $markdown = '';
-        foreach ($blocks as $block) {
-            $markdown .= $this->process_block($block);
-        }
-        return $markdown;
-    }
-
-    private function process_block($block) {
-        // ... code de conversion en markdown ...
+    private function convert_to_markdown($block) {
+   
+        $markdown_converter = new Markdown_Converter();
+        error_log(json_encode($markdown_converter));
+        return $markdown_converter->process($block);
     }
 } 

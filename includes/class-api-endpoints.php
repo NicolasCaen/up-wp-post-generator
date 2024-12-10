@@ -109,30 +109,75 @@ class ChatGPT_API_Endpoints {
     }
     public function generate_content($request) {
         try {
-            $params = $request->get_params();
-            error_log('Params reçus: ' . print_r($params, true)); // Debug log
-            $type = $params['type'];
-            error_log('Type reçu: ' . $type); // Debug log
-                
-            // Vérifier si le processeur nécessite un prompt
-            if (Processor_Registry::requires_prompt($type) && empty($params['prompt'])) {
-                throw new Exception(__('Veuillez saisir les instructions', 'chatgpt-content-generator'));
-            }
+            // Activer le mode debug
+            error_log('Début generate_content');
             
-            $processor = Processor_Registry::get_processor($type);
-            $result = $processor->process(
-                $params['content'],
-                $params['prompt'] ?? '',
-                $params['follow_up_prompt'] ?? ''
-            );
-    
-            return new WP_REST_Response([
-                'success' => true,
-                'content' => $result
-            ], 200);
-    
+            $params = $request->get_params();
+            error_log('Paramètres reçus : ' . print_r($params, true));
+
+            // Vérification des paramètres requis
+            if (empty($params['type'])) {
+                return new WP_Error(
+                    'missing_parameter',
+                    'Le paramètre "type" est requis',
+                    array('status' => 400)
+                );
+            }
+
+            if (empty($params['content'])) {
+                return new WP_Error(
+                    'missing_parameter',
+                    'Le paramètre "content" est requis',
+                    array('status' => 400)
+                );
+            }
+
+            $type = sanitize_text_field($params['type']);
+            
+            try {
+                // Vérifier si le processeur existe
+                if (!in_array($type, Processor_Registry::get_available_types())) {
+                    return new WP_Error(
+                        'invalid_processor',
+                        'Type de processeur invalide: ' . $type,
+                        array('status' => 400)
+                    );
+                }
+
+                // Vérifier si le processeur nécessite un prompt
+                if (Processor_Registry::requires_prompt($type) && empty($params['prompt'])) {
+                    return new WP_Error(
+                        'missing_prompt',
+                        'Ce type de processeur nécessite des instructions',
+                        array('status' => 400)
+                    );
+                }
+                
+                $processor = Processor_Registry::get_processor($type);
+                $result = $processor->process(
+                    wp_kses_post($params['content']),
+                    isset($params['prompt']) ? sanitize_textarea_field($params['prompt']) : '',
+                    isset($params['follow_up_prompt']) ? sanitize_textarea_field($params['follow_up_prompt']) : ''
+                );
+
+                error_log('Résultat généré avec succès');
+                
+                return new WP_REST_Response([
+                    'success' => true,
+                    'content' => $result
+                ], 200);
+
+            } catch (Exception $e) {
+                error_log('Erreur processeur: ' . $e->getMessage());
+                return new WP_Error(
+                    'processor_error',
+                    $e->getMessage(),
+                    array('status' => 500)
+                );
+            }
+
         } catch (Exception $e) {
-            error_log('Erreur dans generate_content: ' . $e->getMessage()); // Debug log
+            error_log('Erreur générale: ' . $e->getMessage());
             return new WP_Error(
                 'generation_error',
                 $e->getMessage(),

@@ -43,7 +43,7 @@
             try {
                 const preparedData = prepareData();
                 alert(JSON.stringify(preparedData));
-                const response = await fetch('/wp-json/chatgpt-content-generator/v1/generate', {
+                const response = await fetch(chatgptSettings.restUrl + 'generate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

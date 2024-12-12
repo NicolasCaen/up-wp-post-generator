@@ -23,12 +23,14 @@ require_once plugin_dir_path(__FILE__) . 'includes/utils/class-markdown-to-guten
 require_once plugin_dir_path(__FILE__) . 'includes/processors/class-seo-processor.php';
 require_once plugin_dir_path(__FILE__) . 'includes/processors/class-markdown-processor.php';
 require_once plugin_dir_path(__FILE__) . 'includes/processors/class-markdown-to-blocks-processor.php';
+require_once plugin_dir_path(__FILE__) . 'includes/processors/class-markdown-update-blocks-processor.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-api-endpoints.php';
 
 add_action('init', function() {
     Processor_Registry::register_processor(SEO_Processor::class);
     Processor_Registry::register_processor(Markdown_Processor::class);
     Processor_Registry::register_processor(Markdown_To_Blocks_Processor::class);
+    Processor_Registry::register_processor(Markdown_Update_Blocks_Processor::class);
 
     new ChatGPT_API_Endpoints();
 });
@@ -113,6 +115,11 @@ class UP_WP_Post_Generator {
                     'value' => 'markdown_to_blocks',
                     'requiresPrompt' => false
                 ),
+                // array(
+                //     'label' => 'Mettre à jour avec Markdown',
+                //     'value' => 'markdown_update_blocks',
+                //     'requiresPrompt' => false
+                // ),
                 array(
                     'label' => 'Nouveau contenu',
                     'value' => 'new_content',

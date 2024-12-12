@@ -43,9 +43,6 @@ class Markdown_Converter extends Abstract_Utility {
     }
 
     private function convert_block_to_markdown($block) {
-        // Log pour déboguer la structure des blocs
-        error_log('Block reçu: ' . print_r($block, true));
-
         if (!isset($block['blockName'])) {
             return '';
         }
@@ -98,8 +95,31 @@ class Markdown_Converter extends Abstract_Utility {
                 return trim($content);
                 break;
 
+            case 'core/media-text':
+                // Extraire l'image du media-text
+                if (isset($block['innerHTML'])) {
+                    $dom = new DOMDocument();
+                    @$dom->loadHTML(mb_convert_encoding($block['innerHTML'], 'HTML-ENTITIES', 'UTF-8'));
+                    $images = $dom->getElementsByTagName('img');
+                    
+                    if ($images->length > 0) {
+                        $img = $images->item(0);
+                        $url = $img->getAttribute('src');
+                        $alt = $img->getAttribute('alt');
+                        
+                        $markdown .= "![" . $alt . "](" . $url . ")\n\n";
+                    }
+                }
+                
+                // Traiter le contenu texte
+                if (isset($block['innerBlocks']) && !empty($block['innerBlocks'])) {
+                    foreach ($block['innerBlocks'] as $innerBlock) {
+                        $markdown .= $this->convert_block_to_markdown($innerBlock);
+                    }
+                }
+                break;
+
             case 'core/image':
-                // Extraire l'URL de l'image depuis innerHTML en utilisant DOMDocument
                 if (isset($block['innerHTML'])) {
                     $dom = new DOMDocument();
                     @$dom->loadHTML(mb_convert_encoding($block['innerHTML'], 'HTML-ENTITIES', 'UTF-8'));

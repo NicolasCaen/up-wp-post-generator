@@ -19,98 +19,71 @@ class Markdown_To_Gutenberg_Converter extends Abstract_Utility {
             return '';
         }
 
-        // Séparer le contenu en lignes
         $lines = explode("\n", $markdown);
         $gutenberg = '';
-        $buffer = '';
+        $listBuffer = '';
+        $inList = false;
         
         foreach ($lines as $line) {
             $line = trim($line);
             
-            // Ignorer les lignes vides sauf si on veut forcer un saut de paragraphe
-            if (empty($line) && empty($buffer)) {
-                continue;
-            }
-
-            // Titres
-            if (preg_match('/^(#{1,6})\s+(.+)$/', $line, $matches)) {
-                $level = strlen($matches[1]);
-                $content = $matches[2];
-                $gutenberg .= $this->flush_buffer($buffer);
-                $gutenberg .= $this->create_heading_block($content, $level);
-                continue;
-            }
-
-            // Images
-            if (preg_match('/^!\[(.*?)\]\((.*?)\)$/', $line, $matches)) {
-                $alt = $matches[1];
-                $url = $matches[2];
-                $gutenberg .= $this->flush_buffer($buffer);
-                $gutenberg .= $this->create_image_block($url, $alt);
+            if (empty($line)) {
+                if ($inList) {
+                    $gutenberg .= $this->closeList($listBuffer);
+                    $listBuffer = '';
+                    $inList = false;
+                }
                 continue;
             }
 
             // Listes
             if (preg_match('/^[-*]\s+(.+)$/', $line, $matches)) {
-                if (empty($buffer) || !str_contains($buffer, '<!-- wp:list -->')) {
-                    $gutenberg .= $this->flush_buffer($buffer);
-                    $buffer = "<!-- wp:list -->\n<ul class=\"wp-block-list\">\n";
+                if (!$inList) {
+                    $inList = true;
+                    $listBuffer = "<!-- wp:list -->\n<ul class=\"wp-block-list\">\n";
                 }
-                $buffer .= $this->create_list_item($matches[1]);
+                $listBuffer .= $this->create_list_item($matches[1]);
                 continue;
             }
 
-            // Listes numérotées
-            if (preg_match('/^\d+\.\s+(.+)$/', $line, $matches)) {
-                if (empty($buffer) || !str_contains($buffer, '<!-- wp:list {"ordered":true} -->')) {
-                    $gutenberg .= $this->flush_buffer($buffer);
-                    $buffer = "<!-- wp:list {\"ordered\":true} -->\n<ol class=\"wp-block-list\">\n";
-                }
-                $buffer .= $this->create_list_item($matches[1]);
-                continue;
+            // Si on n'est plus dans une liste
+            if ($inList && !preg_match('/^[-*]\s+(.+)$/', $line)) {
+                $gutenberg .= $this->closeList($listBuffer);
+                $listBuffer = '';
+                $inList = false;
             }
 
-            // Citations
-            if (preg_match('/^>\s+(.+)$/', $line, $matches)) {
-                if (empty($buffer) || !str_contains($buffer, '<!-- wp:quote -->')) {
-                    $gutenberg .= $this->flush_buffer($buffer);
-                    $buffer = "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\">\n";
+            // Autres types de contenu
+            if (!$inList) {
+                if (preg_match('/^(#{1,6})\s+(.+)$/', $line, $matches)) {
+                    $gutenberg .= $this->create_heading_block($matches[2], strlen($matches[1]));
+                } elseif (preg_match('/^!\[(.*?)\]\((.*?)\)$/', $line, $matches)) {
+                    $gutenberg .= $this->create_image_block($matches[2], $matches[1]);
+                } elseif (preg_match('/^>\s+(.+)$/', $line, $matches)) {
+                    $gutenberg .= $this->create_quote_block($matches[1]);
+                } else {
+                    $gutenberg .= $this->create_paragraph($line);
                 }
-                $buffer .= $this->create_paragraph($matches[1]);
-                continue;
-            }
-
-            // Paragraphes normaux
-            if (!empty($line)) {
-                if (empty($buffer) || str_contains($buffer, '</ul>') || str_contains($buffer, '</ol>') || str_contains($buffer, '</blockquote>')) {
-                    $gutenberg .= $this->flush_buffer($buffer);
-                    $buffer = '';
-                }
-                $buffer .= $this->create_paragraph($line);
             }
         }
 
-        // Vider le buffer final
-        $gutenberg .= $this->flush_buffer($buffer);
+        // Fermer la dernière liste si nécessaire
+        if ($inList) {
+            $gutenberg .= $this->closeList($listBuffer);
+        }
 
         return $gutenberg;
     }
 
-    private function flush_buffer($buffer) {
-        if (empty($buffer)) {
-            return '';
-        }
+    private function create_list_item($content) {
+        return sprintf(
+            "<!-- wp:list-item -->\n<li>%s</li>\n<!-- /wp:list-item -->\n",
+            esc_html($content)
+        );
+    }
 
-        // Fermer les balises ouvertes
-        if (str_contains($buffer, '<ul class="wp-block-list">')) {
-            $buffer .= "</ul>\n<!-- /wp:list -->\n";
-        } elseif (str_contains($buffer, '<ol class="wp-block-list">')) {
-            $buffer .= "</ol>\n<!-- /wp:list -->\n";
-        } elseif (str_contains($buffer, '<blockquote class="wp-block-quote">')) {
-            $buffer .= "</blockquote>\n<!-- /wp:quote -->\n";
-        }
-
-        return $buffer;
+    private function closeList($listBuffer) {
+        return $listBuffer . "</ul>\n<!-- /wp:list -->\n\n";
     }
 
     private function create_heading_block($content, $level) {
@@ -138,9 +111,9 @@ class Markdown_To_Gutenberg_Converter extends Abstract_Utility {
         );
     }
 
-    private function create_list_item($content) {
+    private function create_quote_block($content) {
         return sprintf(
-            "<!-- wp:list-item -->\n<li>%s</li>\n<!-- /wp:list-item -->\n",
+            "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\">\n%s\n</blockquote>\n<!-- /wp:quote -->\n\n",
             esc_html($content)
         );
     }

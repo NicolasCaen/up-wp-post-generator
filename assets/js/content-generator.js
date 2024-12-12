@@ -1,37 +1,42 @@
 ( function( wp ) {
     const { createElement } = wp.element;
-    const { PluginSidebar } = wp.editPost; 
+    const { PluginSidebar } = wp.editor; 
     const { PanelBody, TextareaControl, Button, SelectControl } = wp.components;
     const { select, dispatch } = wp.data;
     const { registerPlugin } = wp.plugins;
- 
+
 
     // Créer un composant d'édition séparé
     const EditableContent = React.memo(React.forwardRef(({ initialContent, onSave }, ref) => {
         const editorRef = React.useRef(null);
         const cmRef = React.useRef(null);
 
+        // Initialisation de CodeMirror
         React.useEffect(() => {
-            if (editorRef.current && !cmRef.current) {
-                cmRef.current = CodeMirror.fromTextArea(editorRef.current, {
-                    mode: 'markdown',
-                    theme: 'monokai',
-                    lineNumbers: false,
-                    lineWrapping: true,
-                    viewportMargin: Infinity,
-                    autofocus: true,
-                    inputStyle: 'contenteditable',
-                    undoDepth: 200,
-                    tabSize: 2,
-                    dragDrop: true,
-                    extraKeys: {
-                        "Enter": "newlineAndIndentContinueMarkdownList",
-                        "Ctrl-Space": "autocomplete"
-                    }
-                });
+            console.log('Initialisation de CodeMirror');
+            if (editorRef.current && !cmRef.current && window.CodeMirror) {
+                try {
+                    cmRef.current = window.CodeMirror.fromTextArea(editorRef.current, {
+                        mode: 'markdown',
+                        theme: 'monokai',
+                        lineNumbers: false,
+                        lineWrapping: true,
+                        viewportMargin: Infinity,
+                        autofocus: true,
+                        inputStyle: 'contenteditable',
+                        undoDepth: 200,
+                        tabSize: 2,
+                        dragDrop: true,
+                        extraKeys: {
+                            "Enter": "newlineAndIndentContinueMarkdownList"
+                        }
+                    });
 
-                // Définir la valeur initiale
-                cmRef.current.setValue(initialContent);
+                    cmRef.current.setValue(initialContent);
+                    console.log('CodeMirror initialisé avec succès');
+                } catch (error) {
+                    console.error('Erreur lors de l\'initialisation de CodeMirror:', error);
+                }
             }
 
             return () => {
@@ -40,23 +45,24 @@
                     cmRef.current = null;
                 }
             };
-        }, []);
+        }, [initialContent]);
 
-        // Exposer une méthode pour récupérer le contenu actuel
+        // Exposer la méthode getValue
         React.useImperativeHandle(ref, () => ({
-            getValue: () => cmRef.current ? cmRef.current.getValue() : ''
-        }));
+            getValue: () => {
+                console.log('getValue appelé');
+                return cmRef.current ? cmRef.current.getValue() : '';
+            }
+        }), []);
 
-        return React.useMemo(() => 
-            createElement('textarea', {
-                ref: editorRef,
-                defaultValue: initialContent,
-                style: {
-                    width: '100%',
-                    minHeight: '200px'
-                }
-            }), 
-        []);
+        return createElement('textarea', {
+            ref: editorRef,
+            defaultValue: initialContent,
+            style: {
+                width: '100%',
+                minHeight: '200px'
+            }
+        });
     }));
 
     const ChatGPTContentGenerator = () => {
@@ -123,7 +129,7 @@
             } catch (error) {
                 console.error('Erreur:', error);
                 dispatch('core/notices').createErrorNotice(
-                    `Erreur lors de la g��nération: ${error.message}`,
+                    `Erreur lors de la génération: ${error.message}`,
                     { type: 'snackbar' }
                 );
             } finally {
@@ -134,6 +140,25 @@
         // Modifier le PreviewDialog pour utiliser le nouveau composant
         const PreviewDialog = () => {
             if (!showDialog) return null;
+            
+            const editorRef = React.useRef(null);
+
+            const handleApply = React.useCallback(() => {
+                console.log('Bouton Appliquer cliqué');
+                try {
+                    if (editorRef.current) {
+                        const content = editorRef.current.getValue();
+                        console.log('Contenu récupéré:', content);
+                        const blocks = wp.blocks.parse(content);
+                        dispatch('core/block-editor').resetBlocks(blocks);
+                        setShowDialog(false);
+                    } else {
+                        console.error('editorRef.current est null');
+                    }
+                } catch (error) {
+                    console.error('Erreur lors de l\'application:', error);
+                }
+            }, []);
 
             return createElement('div', {
                 className: 'chatgpt-preview-dialog',
@@ -153,14 +178,11 @@
                 }
             },
             createElement('h2', {}, 'Prévisualisation du contenu'),
-            createElement('pre', {
-                style: {
-                    whiteSpace: 'pre-wrap',
-                    backgroundColor: '#f5f5f5',
-                    padding: '10px',
-                    borderRadius: '4px'
-                }
-            }, generatedContent),
+            createElement(EditableContent, {
+                ref: editorRef,
+                initialContent: generatedContent,
+                onSave: () => {}
+            }),
             createElement('div', {
                 style: {
                     display: 'flex',
@@ -170,11 +192,7 @@
             },
                 createElement(Button, {
                     isPrimary: true,
-                    onClick: () => {
-                        const blocks = wp.blocks.parse(generatedContent);
-                        dispatch('core/block-editor').resetBlocks(blocks);
-                        setShowDialog(false);
-                    }
+                    onClick: handleApply
                 }, 'Appliquer'),
                 createElement(Button, {
                     isSecondary: true,

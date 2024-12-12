@@ -65,6 +65,36 @@ class UP_WP_Post_Generator {
             true
         );
 
+        wp_enqueue_script(
+            'codemirror-script',
+            'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js',
+            array('wp-element'),
+            '6.65.7',
+            true
+        );
+        
+        wp_enqueue_script(
+            'codemirror-markdown',
+            'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/markdown/markdown.min.js',
+            array('codemirror-script'),
+            '6.65.7',
+            true
+        );
+        
+        wp_enqueue_style(
+            'codemirror-style',
+            'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css',
+            array(),
+            '6.65.7'
+        );
+        
+        wp_enqueue_style(
+            'codemirror-theme',
+            'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/theme/monokai.min.css',
+            array('codemirror-style'),
+            '6.65.7'
+        );
+
         wp_localize_script('chatgpt-content-generator', 'chatgptSettings', array(
             'nonce' => wp_create_nonce('wp_rest'),
             'seoPluginActive' => defined('WPSEO_VERSION') || class_exists('RankMath'),

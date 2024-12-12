@@ -61,6 +61,15 @@ class Markdown_Processor extends Abstract_Content_Processor {
                         $markdown .= "\n";
                     }
                     break;
+                    
+                case 'core/image':
+                    if (preg_match('/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*>/s', $block['innerHTML'], $matches)) {
+                        $src = $matches[1];
+                        $alt = $matches[2];
+                        $markdown .= '![' . $alt . '](' . $src . ")\n\n";
+                        error_log("Image détectée: " . $src);
+                    }
+                    break;
             }
 
             if (isset($block['innerBlocks']) && !empty($block['innerBlocks'])) {

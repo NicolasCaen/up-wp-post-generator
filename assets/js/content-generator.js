@@ -4,6 +4,60 @@
     const { PanelBody, TextareaControl, Button, SelectControl } = wp.components;
     const { select, dispatch } = wp.data;
     const { registerPlugin } = wp.plugins;
+ 
+
+    // Créer un composant d'édition séparé
+    const EditableContent = React.memo(React.forwardRef(({ initialContent, onSave }, ref) => {
+        const editorRef = React.useRef(null);
+        const cmRef = React.useRef(null);
+
+        React.useEffect(() => {
+            if (editorRef.current && !cmRef.current) {
+                cmRef.current = CodeMirror.fromTextArea(editorRef.current, {
+                    mode: 'markdown',
+                    theme: 'monokai',
+                    lineNumbers: false,
+                    lineWrapping: true,
+                    viewportMargin: Infinity,
+                    autofocus: true,
+                    inputStyle: 'contenteditable',
+                    undoDepth: 200,
+                    tabSize: 2,
+                    dragDrop: true,
+                    extraKeys: {
+                        "Enter": "newlineAndIndentContinueMarkdownList",
+                        "Ctrl-Space": "autocomplete"
+                    }
+                });
+
+                // Définir la valeur initiale
+                cmRef.current.setValue(initialContent);
+            }
+
+            return () => {
+                if (cmRef.current) {
+                    cmRef.current.toTextArea();
+                    cmRef.current = null;
+                }
+            };
+        }, []);
+
+        // Exposer une méthode pour récupérer le contenu actuel
+        React.useImperativeHandle(ref, () => ({
+            getValue: () => cmRef.current ? cmRef.current.getValue() : ''
+        }));
+
+        return React.useMemo(() => 
+            createElement('textarea', {
+                ref: editorRef,
+                defaultValue: initialContent,
+                style: {
+                    width: '100%',
+                    minHeight: '200px'
+                }
+            }), 
+        []);
+    }));
 
     const ChatGPTContentGenerator = () => {
         const [prompt, setPrompt] = React.useState('');
@@ -42,7 +96,7 @@
             setIsGenerating(true);
             try {
                 const preparedData = prepareData();
-                alert(JSON.stringify(preparedData));
+        
                 const response = await fetch(chatgptSettings.restUrl + 'generate', {
                     method: 'POST',
                     headers: {
@@ -70,7 +124,7 @@
             } catch (error) {
                 console.error('Erreur:', error);
                 dispatch('core/notices').createErrorNotice(
-                    `Erreur lors de la génération: ${error.message}`,
+                    `Erreur lors de la g��nération: ${error.message}`,
                     { type: 'snackbar' }
                 );
             } finally {
@@ -78,9 +132,15 @@
             }
         };
 
-        // Composant Dialog pour prévisualiser
+        // Modifier le PreviewDialog pour utiliser le nouveau composant
         const PreviewDialog = () => {
             if (!showDialog) return null;
+            
+            const editorRef = React.useRef(null);
+
+            const handleSave = (newContent) => {
+                setGeneratedContent(newContent);
+            };
 
             return createElement('div', {
                 className: 'chatgpt-preview-dialog',
@@ -100,14 +160,10 @@
                 }
             },
             createElement('h2', {}, 'Prévisualisation du contenu'),
-            createElement('pre', {
-                style: {
-                    whiteSpace: 'pre-wrap',
-                    backgroundColor: '#f5f5f5',
-                    padding: '10px',
-                    borderRadius: '4px'
-                }
-            }, generatedContent),
+            createElement(EditableContent, {
+                initialContent: generatedContent,
+                onSave: handleSave
+            }),
             createElement('div', {
                 style: {
                     display: 'flex',
@@ -118,7 +174,8 @@
                 createElement(Button, {
                     isPrimary: true,
                     onClick: () => {
-                        const blocks = wp.blocks.parse(generatedContent);
+                        const content = editorRef.current.getValue(); // Récupérer le contenu actuel
+                        const blocks = wp.blocks.parse(content);
                         dispatch('core/block-editor').resetBlocks(blocks);
                         setShowDialog(false);
                     }

@@ -143,20 +143,75 @@
             
             const editorRef = React.useRef(null);
 
-            const handleApply = React.useCallback(() => {
-                console.log('Bouton Appliquer cliqué');
+            const handleApply = React.useCallback(async () => {
                 try {
                     if (editorRef.current) {
-                        const content = editorRef.current.getValue();
-                        console.log('Contenu récupéré:', content);
-                        const blocks = wp.blocks.parse(content);
-                        dispatch('core/block-editor').resetBlocks(blocks);
-                        setShowDialog(false);
-                    } else {
-                        console.error('editorRef.current est null');
+                        // 1. Récupérer et logger le contenu
+                        const markdownContent = editorRef.current.getValue();
+                        console.log('1. Markdown content:', markdownContent);
+
+                        // 2. Récupérer et logger les blocs
+                        const currentBlocks = select('core/block-editor').getBlocks();
+                        console.log('2. Current blocks:', currentBlocks);
+
+                        // 3. Sérialiser les blocs
+                        const serializedBlocks = wp.blocks.serialize(currentBlocks);
+                        console.log('3. Serialized blocks:', serializedBlocks);
+
+                        // 4. Créer FormData
+                        const formData = new FormData();
+                        formData.append('content', markdownContent);
+                        formData.append('original_blocks', serializedBlocks);
+                        formData.append('type', 'markdown_update_blocks');
+
+                        // Logger le contenu de FormData
+                        for (let pair of formData.entries()) {
+                            console.log('4. FormData entry:', pair[0], pair[1].length);
+                        }
+
+                        // 5. Envoyer la requête
+                        console.log('5. Sending request to:', chatgptSettings.restUrl + 'generate');
+                        const response = await fetch(chatgptSettings.restUrl + 'generate', {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': chatgptSettings.nonce
+                            },
+                            body: formData
+                        });
+
+                        // 6. Logger la réponse brute
+                        const responseText = await response.text();
+                        console.log('6. Raw response:', responseText);
+
+                        // 7. Parser la réponse
+                        let data;
+                        try {
+                            data = JSON.parse(responseText);
+                            console.log('7. Parsed response:', data);
+                        } catch (e) {
+                            console.error('8. JSON parse error:', e);
+                            throw new Error('Réponse invalide du serveur');
+                        }
+
+                        if (!response.ok) {
+                            throw new Error(data.message || 'Erreur lors de la mise à jour');
+                        }
+
+                        if (data.success && data.content) {
+                            console.log('10. Updating blocks with:', data.content);
+                            const updatedBlocks = wp.blocks.parse(data.content);
+                            dispatch('core/block-editor').resetBlocks(updatedBlocks);
+                            setShowDialog(false);
+                        } else {
+                            throw new Error('Aucun contenu retourné par le serveur');
+                        }
                     }
                 } catch (error) {
-                    console.error('Erreur lors de l\'application:', error);
+                    console.error('Erreur complète:', error);
+                    dispatch('core/notices').createErrorNotice(
+                        `Erreur lors de la mise à jour: ${error.message}`,
+                        { type: 'snackbar' }
+                    );
                 }
             }, []);
 

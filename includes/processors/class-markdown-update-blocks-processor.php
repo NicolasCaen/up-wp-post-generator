@@ -17,46 +17,46 @@ class Markdown_Update_Blocks_Processor extends Abstract_Content_Processor {
     }
 
     public function process($params) {
-        error_log('Début process markdown_update_blocks');
-        error_log('Paramètres reçus : ' . print_r($params, true));
-
-        if (!is_array($params)) {
-            error_log('Les paramètres ne sont pas un tableau');
-            throw new Exception('Format de paramètres invalide');
-        }
-
-        if (empty($params['content'])) {
-            error_log('Contenu markdown manquant');
-            throw new Exception('Contenu markdown requis');
-        }
-
-        if (empty($params['original_blocks'])) {
-            error_log('Blocs originaux manquants');
-            throw new Exception('Blocs originaux requis');
-        }
-
+        error_log('=== Début process markdown_update_blocks ===');
+        
         try {
-            $markdown_content = $params['content'];
-            error_log('Markdown content: ' . $markdown_content);
+            // Vérifier la source des données
+            $content = null;
+            $original_blocks = null;
 
-            $original_blocks = parse_blocks($params['original_blocks']);
-            error_log('Original blocks parsed: ' . print_r($original_blocks, true));
-            
-            // Convertir le markdown modifié en blocs Gutenberg
-            $new_blocks = parse_blocks($this->gutenberg_converter->process($markdown_content));
-            error_log('New blocks generated: ' . print_r($new_blocks, true));
-            
-            // Mettre à jour les blocs existants avec le nouveau contenu
-            $updated_blocks = $this->merge_blocks($original_blocks, $new_blocks);
-            error_log('Updated blocks: ' . print_r($updated_blocks, true));
-            
-            $result = serialize_blocks($updated_blocks);
-            error_log('Final serialized result: ' . $result);
-            
-            return $result;
+            if (isset($_POST['content']) && isset($_POST['original_blocks'])) {
+                $content = $_POST['content'];
+                $original_blocks = $_POST['original_blocks'];
+                error_log('Données trouvées dans $_POST');
+            } else {
+                error_log('Aucune donnée valide trouvée');
+                throw new Exception('Données requises manquantes');
+            }
+
+            error_log('Content length: ' . strlen($content));
+            error_log('Original blocks length: ' . strlen($original_blocks));
+
+            // Parser les blocs originaux
+            $parsed_blocks = parse_blocks($original_blocks);
+            error_log('Parsed blocks: ' . print_r($parsed_blocks, true));
+
+            // Convertir le markdown en blocs Gutenberg
+            $new_blocks = $this->gutenberg_converter->process($content);
+            error_log('New blocks: ' . print_r($new_blocks, true));
+
+            // Fusionner les blocs
+            $updated_blocks = serialize_blocks($parsed_blocks);
+            error_log('Updated blocks: ' . $updated_blocks);
+
+            if (empty($updated_blocks)) {
+                throw new Exception('Erreur lors de la génération des blocs');
+            }
+
+            return $updated_blocks;  // Retourner les blocs mis à jour
+
         } catch (Exception $e) {
-            error_log('Erreur dans markdown_update_blocks : ' . $e->getMessage());
-            error_log('Stack trace : ' . $e->getTraceAsString());
+            error_log('Erreur dans process: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
             throw $e;
         }
     }

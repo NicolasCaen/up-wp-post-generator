@@ -96,7 +96,6 @@
             setIsGenerating(true);
             try {
                 const preparedData = prepareData();
-        
                 const response = await fetch(chatgptSettings.restUrl + 'generate', {
                     method: 'POST',
                     headers: {
@@ -135,12 +134,6 @@
         // Modifier le PreviewDialog pour utiliser le nouveau composant
         const PreviewDialog = () => {
             if (!showDialog) return null;
-            
-            const editorRef = React.useRef(null);
-
-            const handleSave = (newContent) => {
-                setGeneratedContent(newContent);
-            };
 
             return createElement('div', {
                 className: 'chatgpt-preview-dialog',
@@ -160,10 +153,14 @@
                 }
             },
             createElement('h2', {}, 'Prévisualisation du contenu'),
-            createElement(EditableContent, {
-                initialContent: generatedContent,
-                onSave: handleSave
-            }),
+            createElement('pre', {
+                style: {
+                    whiteSpace: 'pre-wrap',
+                    backgroundColor: '#f5f5f5',
+                    padding: '10px',
+                    borderRadius: '4px'
+                }
+            }, generatedContent),
             createElement('div', {
                 style: {
                     display: 'flex',
@@ -174,8 +171,7 @@
                 createElement(Button, {
                     isPrimary: true,
                     onClick: () => {
-                        const content = editorRef.current.getValue(); // Récupérer le contenu actuel
-                        const blocks = wp.blocks.parse(content);
+                        const blocks = wp.blocks.parse(generatedContent);
                         dispatch('core/block-editor').resetBlocks(blocks);
                         setShowDialog(false);
                     }

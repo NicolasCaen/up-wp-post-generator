@@ -1,14 +1,24 @@
 <?php
 class Markdown_Processor extends Abstract_Content_Processor {
+    private $markdown_converter;
+
+    public function __construct() {
+        $this->markdown_converter = new Markdown_Converter();
+    }
+
     public static function uses_chatgpt() {
         return false;
     }
 
     public function process($content) {
-        $blocks = parse_blocks($content);
-        $markdown = $this->convert_to_markdown($blocks);
-        error_log("markdown final: ".$markdown);
-        return $markdown;
+        $content = str_replace(['<br>', '</br>', '<br/>', '<br />'], "\n", $content);
+        $content = str_replace(["'"], "\'", $content);
+        try {
+            return $this->markdown_converter->process($content);
+        } catch (Exception $e) {
+            error_log("Erreur lors de la conversion Markdown : " . $e->getMessage());
+            return '';
+        }
     }
 
     public static function get_type() {
@@ -59,15 +69,6 @@ class Markdown_Processor extends Abstract_Content_Processor {
                             }
                         }
                         $markdown .= "\n";
-                    }
-                    break;
-                    
-                case 'core/image':
-                    if (preg_match('/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*>/s', $block['innerHTML'], $matches)) {
-                        $src = $matches[1];
-                        $alt = $matches[2];
-                        $markdown .= '![' . $alt . '](' . $src . ")\n\n";
-                        error_log("Image détectée: " . $src);
                     }
                     break;
             }

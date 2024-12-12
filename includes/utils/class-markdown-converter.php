@@ -43,6 +43,9 @@ class Markdown_Converter extends Abstract_Utility {
     }
 
     private function convert_block_to_markdown($block) {
+        // Log pour déboguer la structure des blocs
+        error_log('Block reçu: ' . print_r($block, true));
+
         if (!isset($block['blockName'])) {
             return '';
         }
@@ -96,18 +99,19 @@ class Markdown_Converter extends Abstract_Utility {
                 break;
 
             case 'core/image':
-                if (isset($block['attrs']['url'])) {
-                    $url = $block['attrs']['url'];
-                    $alt = isset($block['attrs']['alt']) ? stripslashes($block['attrs']['alt']) : '';
-                    $caption = isset($block['attrs']['caption']) ? stripslashes($block['attrs']['caption']) : '';
+                // Extraire l'URL de l'image depuis innerHTML en utilisant DOMDocument
+                if (isset($block['innerHTML'])) {
+                    $dom = new DOMDocument();
+                    @$dom->loadHTML(mb_convert_encoding($block['innerHTML'], 'HTML-ENTITIES', 'UTF-8'));
+                    $images = $dom->getElementsByTagName('img');
                     
-                    $markdown .= "![" . $alt . "](" . $url . ")\n";
-                    
-                    if (!empty($caption)) {
-                        $markdown .= "*" . $caption . "*\n";
+                    if ($images->length > 0) {
+                        $img = $images->item(0);
+                        $url = $img->getAttribute('src');
+                        $alt = $img->getAttribute('alt');
+                        
+                        $markdown .= "![" . $alt . "](" . $url . ")\n\n";
                     }
-                    
-                    $markdown .= "\n";
                 }
                 break;
 
